@@ -12,6 +12,7 @@ export async function loadFFmpeg(
   if (ffmpegInstance && isLoaded) return ffmpegInstance
 
   const ffmpeg = new FFmpeg()
+
   ffmpeg.on('log', ({ message }) => console.log('[FFmpeg]', message))
 
   if (onProgress) {
@@ -19,10 +20,10 @@ export async function loadFFmpeg(
   }
 
   const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm'
-await ffmpeg.load({
-  coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-  wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-})
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+  })
 
   ffmpegInstance = ffmpeg
   isLoaded = true
@@ -57,36 +58,35 @@ export async function extractSegmentFrames(
 ): Promise<ExtractedFrame[]> {
   if (signal?.aborted) throw new Error('Aborted')
 
-  const inputName = `input_seg${segment.index}.${videoFile.name.split('.').pop() ?? 'mp4'}`
+  const ext = videoFile.name.split('.').pop() ?? 'mp4'
+  const inputName = `input_seg${segment.index}.${ext}`
   const frames: ExtractedFrame[] = []
 
   await ffmpeg.writeFile(inputName, await fetchFile(videoFile))
 
   const segDuration = segment.endTime - segment.startTime
+  const framePrefix = `frm_s${segment.index}_`
 
-  const outputPattern = `frame_s${segment.index}_%03d.jpg`
-
-await ffmpeg.exec([
-  '-i', inputName,
-  '-ss', String(segment.startTime),
-  '-t', String(segDuration),
-  '-r', String(Math.ceil(config.framesPerSegment / segDuration)),
-  '-frames:v', String(config.framesPerSegment),
-  '-q:v', '2',
-  outputPattern,
-])
-  
   for (let f = 1; f <= config.framesPerSegment; f++) {
     if (signal?.aborted) break
 
-    const frameName = `frame_s${segment.index}_${String(f).padStart(3, '0')}.jpg`
+    const timestamp = segment.startTime + ((f - 1) / config.framesPerSegment) * segDuration
+    const frameName = `${framePrefix}${String(f).padStart(3, '0')}.jpg`
+
     try {
+      await ffmpeg.exec([
+        '-ss', String(timestamp),
+        '-i', inputName,
+        '-frames:v', '1',
+        '-q:v', '2',
+        frameName,
+      ])
+
       const data = await ffmpeg.readFile(frameName)
       const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string)
       const copy = new Uint8Array(bytes.length)
-        copy.set(bytes)
+      copy.set(bytes)
       const blob = new Blob([copy], { type: 'image/jpeg' })
-      
       const url = URL.createObjectURL(blob)
       const globalIndex = segment.index * config.framesPerSegment + f
       const filename = generateFrameFilename(videoBaseName, segment.index + 1, f)
@@ -97,18 +97,17 @@ await ffmpeg.exec([
         globalIndex,
         filename,
         url,
-        timestamp: segment.startTime + (f / config.framesPerSegment) * segDuration,
+        timestamp,
       }
 
       frames.push(frame)
       onFrameExtracted(frame)
       await ffmpeg.deleteFile(frameName)
-    } catch {
-      // Frame may not have been generated if video is shorter than expected
+    } catch (e) {
+      console.warn(`[FFmpeg] Frame ${f} failed:`, e)
     }
   }
 
-  // Cleanup
   try { await ffmpeg.deleteFile(inputName) } catch { /* ignore */ }
 
   return frames
