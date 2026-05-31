@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', '@ffmpeg/core-mt'],
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
   },
   server: {
     headers: {
@@ -23,8 +23,5 @@ export default defineConfig({
         },
       },
     },
-  },
-  worker: {
-    format: 'es',
   },
 })
