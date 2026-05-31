@@ -9,6 +9,12 @@ import type { ExtractedFrame, SegmentInfo, ProcessingConfig } from '../types'
 
 const FFMPEG_CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm'
 
+/**
+ * How many segments to process before we recycle the FFmpeg WASM instance.
+ * The WASM heap leaks internal codec state on every exec() call; recycling
+ * every N segments prevents the "memory access out of bounds" crash that
+ * otherwise reliably appears after ~6–8 segments of MJPEG processing.
+ */
 const RECYCLE_AFTER_SEGMENTS = 5
 
 // ---------------------------------------------------------------------------
@@ -17,15 +23,16 @@ const RECYCLE_AFTER_SEGMENTS = 5
 
 let ffmpegInstance: FFmpeg | null = null
 let isLoaded = false
-let currentInputName: string | null = null
-let execCallCount = 0
 
 /**
- * Whether the current video is MJPEG (AVI container with MJPEG codec).
- * MJPEG frames can be demuxed with -c:v copy.
- * All other codecs (H.264, VP9, HEVC, etc.) need -vf fps + -q:v encode.
+ * Name of the input file currently written into the WASM virtual FS.
+ * Kept so we can skip re-uploading the same video across consecutive segments
+ * within the same FFmpeg lifecycle, and so we can clean it up on recycle.
  */
-let isMjpeg = false
+let currentInputName: string | null = null
+
+/** Monotonic counter of exec() calls on the current instance. */
+let execCallCount = 0
 
 // ---------------------------------------------------------------------------
 // Lifecycle helpers
@@ -46,6 +53,10 @@ async function createAndLoadFFmpeg(
   return ffmpeg
 }
 
+/**
+ * Terminate the current FFmpeg instance and fully reset module state.
+ * Must be called before creating a new one to avoid double-loading.
+ */
 function _destroyInstance() {
   if (ffmpegInstance) {
     try { ffmpegInstance.terminate() } catch { /* ignore */ }
@@ -54,13 +65,17 @@ function _destroyInstance() {
   isLoaded = false
   currentInputName = null
   execCallCount = 0
-  isMjpeg = false
 }
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * Load (or return) the shared FFmpeg WASM instance.
+ * Callers that drive a long extraction loop should prefer
+ * `getFFmpegForSegment()` which handles lifecycle recycling automatically.
+ */
 export async function loadFFmpeg(
   onProgress?: (ratio: number) => void
 ): Promise<FFmpeg> {
@@ -71,6 +86,14 @@ export async function loadFFmpeg(
   return ffmpegInstance
 }
 
+/**
+ * Return a ready FFmpeg instance, recycling the WASM heap proactively
+ * every RECYCLE_AFTER_SEGMENTS calls so accumulated internal codec state
+ * never grows large enough to trigger OOB crashes.
+ *
+ * When recycling, the caller MUST re-upload the video file.
+ * Returns { ffmpeg, needsFileUpload } so the caller knows whether to re-write.
+ */
 export async function getFFmpegForSegment(
   onProgress?: (ratio: number) => void
 ): Promise<{ ffmpeg: FFmpeg; needsFileUpload: boolean }> {
@@ -96,27 +119,9 @@ export function getVideoDuration(file: File): Promise<number> {
     video.preload = 'metadata'
     const url = URL.createObjectURL(file)
     video.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(video.duration) }
-    video.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to read video metadata')) }
+    video.onerror      = () => { URL.revokeObjectURL(url); reject(new Error('Failed to read video metadata')) }
     video.src = url
   })
-}
-
-// ---------------------------------------------------------------------------
-// Codec detection
-// ---------------------------------------------------------------------------
-
-/**
- * Detect if the video file is MJPEG by checking the file extension.
- * MJPEG is almost exclusively found in .avi files.
- * MP4, MOV, MKV, WEBM are always H.264/H.265/VP9 — never MJPEG.
- *
- * For .avi files we conservatively assume MJPEG and let ensureValidJpeg()
- * catch any frames that turn out not to be valid JPEGs.
- */
-function detectIsMjpeg(file: File): boolean {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-  // Only AVI containers typically carry MJPEG codec
-  return ext === 'avi'
 }
 
 // ---------------------------------------------------------------------------
@@ -147,10 +152,6 @@ export async function extractSegmentFrames(
     console.log(`[FFmpeg] Writing video to WASM FS: ${inputName} (${(videoFile.size / 1024 / 1024).toFixed(1)} MB)`)
     await ffmpeg.writeFile(inputName, await fetchFile(videoFile))
     currentInputName = inputName
-
-    // Detect codec once per file upload
-    isMjpeg = detectIsMjpeg(videoFile)
-    console.log(`[FFmpeg] Codec mode: ${isMjpeg ? 'MJPEG (-c:v copy)' : 'Standard (-vf fps, JPEG encode)'}`)
   }
 
   // -------------------------------------------------------------------------
@@ -160,23 +161,14 @@ export async function extractSegmentFrames(
   const framePrefix = `frm_s${segment.index}_`
   const outputPattern = `${framePrefix}%03d.jpg`
 
-  // Calculate fps needed to get exactly framesPerSegment frames from segDuration
+  // Detect codec: only .avi files use MJPEG — everything else (mp4, mov, mkv,
+  // webm) is H.264/H.265/VP9 and needs proper JPEG encoding via -vf fps.
+  const isMjpeg = ext === 'avi'
   const fps = config.framesPerSegment / segDuration
 
-  /**
-   * TWO MODES:
-   *
-   * MJPEG (.avi): Use -c:v copy to demux raw JPEG packets directly.
-   *   Fast, zero re-encode, but only valid for MJPEG sources.
-   *
-   * Standard (mp4, mov, mkv, webm, etc.): Use -vf fps filter to sample
-   *   frames at the right rate, then encode each as JPEG with -q:v 2
-   *   (high quality). This is the correct approach for H.264/H.265/VP9.
-   *   Without this, -c:v copy just dumps raw H.264 NAL units into .jpg
-   *   files which are not valid JPEGs at all.
-   */
   const args = isMjpeg
     ? [
+        // MJPEG (.avi): demux raw JPEG packets directly — no transcode needed
         '-ss', String(segment.startTime),
         '-i', inputName,
         '-t', String(segDuration),
@@ -187,13 +179,18 @@ export async function extractSegmentFrames(
         outputPattern,
       ]
     : [
+        // Standard (mp4, mov, mkv, webm, etc.): decode and re-encode as JPEG.
+        // -c:v copy on H.264 dumps raw NAL units which are NOT valid JPEGs.
+        // -vf fps samples exactly framesPerSegment frames over the segment.
+        // -q:v 4 gives good quality JPEG output (~85%) with lower heap usage
+        // than q:v 2, reducing the risk of WASM OOB on long videos.
         '-ss', String(segment.startTime),
         '-i', inputName,
         '-t', String(segDuration),
         '-an',
-        '-vf', `fps=${fps.toFixed(6)}`,   // sample exactly N frames over the segment
+        '-vf', `fps=${fps.toFixed(6)}`,
         '-frames:v', String(config.framesPerSegment),
-        '-q:v', '2',                       // JPEG quality 2 = high quality (~95%)
+        '-q:v', '4',
         '-f', 'image2',
         outputPattern,
       ]
@@ -227,11 +224,11 @@ export async function extractSegmentFrames(
         raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)
       ) as Uint8Array<ArrayBuffer>
 
-      // For standard video, frames are always valid JPEGs (we encoded them).
-      // For MJPEG, still validate/repair the SOI marker.
+      // For MJPEG: validate/repair the SOI marker.
+      // For standard video: frames are always valid JPEGs (we just encoded them).
       const validBytes = isMjpeg
         ? ensureValidJpeg(bytes, segment.index, f)
-        : bytes  // already valid JPEG — we just encoded it
+        : bytes
 
       if (!validBytes) {
         console.warn(`[FFmpeg] Segment ${segment.index} frame ${f}: not a valid JPEG, skipping`)
@@ -240,11 +237,11 @@ export async function extractSegmentFrames(
       }
 
       const blob = new Blob([validBytes], { type: 'image/jpeg' })
-      const url = URL.createObjectURL(blob)
+      const url  = URL.createObjectURL(blob)
 
       const globalIndex = segment.index * config.framesPerSegment + f
-      const filename = generateFrameFilename(videoBaseName, segment.index + 1, f)
-      const timestamp = segment.startTime + ((f - 1) / config.framesPerSegment) * segDuration
+      const filename    = generateFrameFilename(videoBaseName, segment.index + 1, f)
+      const timestamp   = segment.startTime + ((f - 1) / config.framesPerSegment) * segDuration
 
       const frame: ExtractedFrame = {
         segmentIndex: segment.index,
@@ -270,13 +267,20 @@ export async function extractSegmentFrames(
 // JPEG validation / repair (MJPEG only)
 // ---------------------------------------------------------------------------
 
+/**
+ * Verify that `bytes` starts with the JPEG SOI marker (FF D8 FF).
+ * Only called for MJPEG sources — standard video frames are always valid
+ * JPEGs because we encoded them ourselves with -q:v.
+ */
 function ensureValidJpeg(bytes: Uint8Array<ArrayBuffer>, segIdx: number, frameIdx: number): Uint8Array<ArrayBuffer> | null {
   if (bytes.length < 3) return null
 
+  // Perfect — already a valid JPEG SOI
   if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
     return bytes
   }
 
+  // Missing leading 0xFF byte — prepend it
   if (bytes[0] === 0xD8 && bytes[1] === 0xFF) {
     console.warn(`[FFmpeg] Seg ${segIdx} frame ${frameIdx}: prepending missing SOI 0xFF`)
     const fixed = new Uint8Array(bytes.length + 1) as Uint8Array<ArrayBuffer>
@@ -285,6 +289,8 @@ function ensureValidJpeg(bytes: Uint8Array<ArrayBuffer>, segIdx: number, frameId
     return fixed
   }
 
+  // Some cameras write FF D8 without the following app marker FF —
+  // still starts with SOI, so treat as valid.
   if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
     return bytes
   }
