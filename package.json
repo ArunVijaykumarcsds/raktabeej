@@ -10,8 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-"@ffmpeg/ffmpeg": "0.12.6",
-"@ffmpeg/util": "0.12.1",
+"@ffmpeg/ffmpeg": "^0.12.10",
+"@ffmpeg/util": "^0.12.2",
 "@ffmpeg/core": "0.12.6",
     "jszip": "^3.10.1",
     "lucide-react": "^0.395.0",
