@@ -248,7 +248,7 @@ export async function extractSegmentFrames(
         : new TextEncoder().encode(data as string)
       const bytes = new Uint8Array(
         raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)
-      )
+      ) as Uint8Array<ArrayBuffer>
 
       // Validate / repair JPEG SOI marker (FFD8FF)
       const validBytes = ensureValidJpeg(bytes, segment.index, f)
@@ -308,7 +308,7 @@ export async function extractSegmentFrames(
  * decoders handle truncated JPEG gracefully but a spurious EOI on a frame
  * that already has one causes double-trailer artifacts.
  */
-function ensureValidJpeg(bytes: Uint8Array, segIdx: number, frameIdx: number): Uint8Array | null {
+function ensureValidJpeg(bytes: Uint8Array<ArrayBuffer>, segIdx: number, frameIdx: number): Uint8Array<ArrayBuffer> | null {
   if (bytes.length < 3) return null
 
   // Perfect — already a valid JPEG SOI
@@ -319,7 +319,7 @@ function ensureValidJpeg(bytes: Uint8Array, segIdx: number, frameIdx: number): U
   // Missing leading 0xFF byte — prepend it
   if (bytes[0] === 0xD8 && bytes[1] === 0xFF) {
     console.warn(`[FFmpeg] Seg ${segIdx} frame ${frameIdx}: prepending missing SOI 0xFF`)
-    const fixed = new Uint8Array(bytes.length + 1)
+    const fixed = new Uint8Array(bytes.length + 1) as Uint8Array<ArrayBuffer>
     fixed[0] = 0xFF
     fixed.set(bytes, 1)
     return fixed
