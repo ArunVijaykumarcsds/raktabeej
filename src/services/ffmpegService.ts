@@ -72,7 +72,7 @@ export async function extractSegmentFrames(
     '-i', inputName,
     '-t', String(segDuration),
     '-an',
-    '-vcodec', 'copy',
+    '-vf', 'mjpeg2jpeg',
     '-f', 'image2',
     outputPattern,
   ])
