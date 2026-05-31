@@ -12,7 +12,6 @@ export async function loadFFmpeg(
   if (ffmpegInstance && isLoaded) return ffmpegInstance
 
   const ffmpeg = new FFmpeg()
-
   ffmpeg.on('log', ({ message }) => console.log('[FFmpeg]', message))
 
   if (onProgress) {
@@ -66,9 +65,8 @@ export async function extractSegmentFrames(
 
   const segDuration = segment.endTime - segment.startTime
   const framePrefix = `frm_s${segment.index}_`
-
-  // MJPEG videos are already JPEG frames — extract directly
   const outputPattern = `${framePrefix}%03d.jpg`
+
   await ffmpeg.exec([
     '-ss', String(segment.startTime),
     '-i', inputName,
@@ -82,22 +80,7 @@ export async function extractSegmentFrames(
   for (let f = 1; f <= config.framesPerSegment; f++) {
     if (signal?.aborted) break
     const frameName = `${framePrefix}${String(f).padStart(3, '0')}.jpg`
-
-  for (let f = 1; f <= config.framesPerSegment; f++) {
-    if (signal?.aborted) break
-
-    const timestamp = segment.startTime + ((f - 1) / config.framesPerSegment) * segDuration
-    const frameName = `${framePrefix}${String(f).padStart(3, '0')}.jpg`
-
     try {
-      await ffmpeg.exec([
-        '-ss', String(timestamp),
-        '-i', convertedName,
-        '-frames:v', '1',
-        '-q:v', '2',
-        frameName,
-      ])
-
       const data = await ffmpeg.readFile(frameName)
       const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string)
       const copy = new Uint8Array(bytes.length)
@@ -106,6 +89,7 @@ export async function extractSegmentFrames(
       const url = URL.createObjectURL(blob)
       const globalIndex = segment.index * config.framesPerSegment + f
       const filename = generateFrameFilename(videoBaseName, segment.index + 1, f)
+      const timestamp = segment.startTime + ((f - 1) / config.framesPerSegment) * segDuration
 
       const frame: ExtractedFrame = {
         segmentIndex: segment.index,
@@ -124,7 +108,6 @@ export async function extractSegmentFrames(
     }
   }
 
-  try { await ffmpeg.deleteFile(convertedName) } catch { /* ignore */ }
   try { await ffmpeg.deleteFile(inputName) } catch { /* ignore */ }
 
   return frames
