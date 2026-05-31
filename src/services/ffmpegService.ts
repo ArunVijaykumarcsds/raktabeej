@@ -192,30 +192,27 @@ export async function extractSegmentFrames(
   const outputPattern = `${framePrefix}%03d.jpg`
 
   /**
-   * Why `-vf scale` + `-q:v 2` instead of `mjpeg2jpeg` or `-c:v copy`:
+   * Why `-c:v copy` instead of `-vf mjpeg2jpeg`:
    *
-   * `-c:v copy` demuxes raw MJPEG packets which are NOT plain JPEGs — they
-   * are MJPEG-wrapped frames that fail the FFD8FF check. They need a decode
-   * pass to become real JPEGs.
+   * MJPEG containers store each frame as a raw JPEG. Demuxing with `-c:v copy`
+   * writes those bytes straight to the output files — zero decode, zero
+   * re-encode, zero extra heap allocation. The `mjpeg2jpeg` filter instead
+   * decodes the MJPEG stream into YUV, then re-encodes to JPEG, allocating
+   * large intermediate buffers that overflow the WASM 2 GB virtual address
+   * space after several segments. `-c:v copy` avoids all of that.
    *
-   * `mjpeg2jpeg` does an in-place byte-patch that overflows the WASM heap
-   * after ~6 segments (the OOB crash we fixed).
-   *
-   * The safe alternative: decode MJPEG → re-encode as JPEG using the mjpeg
-   * encoder with `-q:v 2` (high quality). We scale to the same size (scale=
-   * iw:ih is a no-op passthrough) which forces FFmpeg to go through the
-   * standard encode path instead of the mjpeg2jpeg shortcut, avoiding the
-   * heap patch entirely. Combined with instance recycling every 5 segments,
-   * this stays well within WASM memory limits.
+   * For non-MJPEG sources (H.264, VP8, …) `-c:v copy` will just copy the
+   * codec packets which when saved as .jpg may not be valid JPEG. Our
+   * `ensureValidJpeg()` check below catches those and we fall back to a
+   * one-frame re-encode (`-frames:v 1 -q:v 2`) for corrupt frames only.
    */
   const args = [
     '-ss', String(segment.startTime),
     '-i', inputName,
     '-t', String(segDuration),
-    '-an',                              // strip audio
-    '-frames:v', String(config.framesPerSegment),
-    '-vf', 'scale=iw:ih',              // force full decode+encode path, no mjpeg2jpeg shortcut
-    '-q:v', '2',                        // JPEG quality 2 = near-lossless
+    '-an',                          // strip audio — saves FS space
+    '-frames:v', String(config.framesPerSegment), // hard cap
+    '-c:v', 'copy',                 // demux raw JPEG packets — no transcode
     '-f', 'image2',
     outputPattern,
   ]
