@@ -79,6 +79,7 @@ export async function extractSegmentFrames(
         '-i', inputName,
         '-frames:v', '1',
         '-q:v', '2',
+        '-vf', 'scale=640:-1',
         frameName,
       ])
 
