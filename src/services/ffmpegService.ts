@@ -12,6 +12,7 @@ export async function loadFFmpeg(
   if (ffmpegInstance && isLoaded) return ffmpegInstance
 
   const ffmpeg = new FFmpeg()
+  ffmpeg.on('log', ({ message }) => console.log('[FFmpeg]', message))
 
   if (onProgress) {
     ffmpeg.on('progress', ({ progress }) => onProgress(progress))
@@ -65,16 +66,16 @@ export async function extractSegmentFrames(
   const fps = config.framesPerSegment / segDuration
   const outputPattern = `frame_s${segment.index}_%03d.jpg`
 
-  await ffmpeg.exec([
-    '-ss', String(segment.startTime),
-    '-i', inputName,
-    '-t', String(segDuration),
-    '-vf', `fps=${fps}`,
-    '-frames:v', String(config.framesPerSegment),
-    '-q:v', '2',
-    '-f', 'image2',
-    outputPattern,
-  ])
+ await ffmpeg.exec([
+  '-i', inputName,
+  '-ss', String(segment.startTime),
+  '-t', String(segDuration),
+  '-vf', `fps=${fps}`,
+  '-frames:v', String(config.framesPerSegment),
+  '-q:v', '2',
+  '-f', 'image2',
+  outputPattern,
+])
 
   for (let f = 1; f <= config.framesPerSegment; f++) {
     if (signal?.aborted) break
