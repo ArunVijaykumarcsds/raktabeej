@@ -35,7 +35,7 @@ export function RaktabeejLore() {
               In the ancient Sanskrit scripture <span className="text-stone-300 italic">Devi Mahatmya</span> — composed within the Markandeya Purana — Raktabeej (रक्तबीज) stands as one of the most formidable generals in the army of the asura kings Shumbha and Nishumbha. His name translates directly from Sanskrit as <span className="text-stone-300">"blood-seed"</span> or <span className="text-stone-300">"he whose seeds are drops of blood."</span>
             </p>
             <p>
-              Raktabeej possessed a divine boon — a terrible gift — granted by Lord Brahma himself: for every drop of his blood that fell upon the earth, an exact duplicate of Raktabeej would instantly arise, fully formed and equally powerful. In battle, this made him not merely difficult to defeat, but paradoxically <span className="text-stone-300 italic">impossible</span> — for every wound dealt to him only multiplied his strength. The armies of the gods struck him again and again, each blow summoning thousands of new warriors from the falling blood, until the battlefield was overrun with his countless forms.
+              According to traditional accounts, Raktabeej obtained a boon from Brahma whereby every drop of his blood falling upon the earth generated another warrior equal in strength and form. In battle, this made him seemingly <span className="text-stone-300 italic">impossible to overcome through ordinary combat</span> — for every wound dealt to him only multiplied his strength. The armies of the gods struck him again and again, each blow summoning thousands of new warriors from the falling blood, until the battlefield was overrun with his countless forms.
             </p>
           </div>
 
@@ -49,10 +49,10 @@ export function RaktabeejLore() {
           <div className="space-y-4">
             <h3 className="font-serif text-lg text-stone-200 font-semibold">Why Was His Boon Unbreakable?</h3>
             <p>
-              The boon was not merely a form of regeneration — it was a <span className="text-stone-300">multiplication principle</span>. Each new instance was not a weakened copy but a complete, full-strength duplicate. Conventional combat could not defeat him because the act of resistance itself became the mechanism of his proliferation. Victory through force was structurally impossible.
+              The boon was not merely a form of regeneration — it was a <span className="text-stone-300">multiplication principle</span>. Each new instance was not a weakened copy but a complete, full-strength warrior. Conventional combat could not defeat him because the act of resistance itself became the mechanism of his proliferation. Victory through force alone was structurally impossible.
             </p>
             <p>
-              It was the goddess <span className="text-stone-300">Kali</span> — the fierce, boundless, time-embodying manifestation of the Divine Mother — who finally resolved the paradox. She consumed each drop of blood before it could reach the ground, drinking from Raktabeej's wounds as Durga slew him, preventing the multiplication at its source. The solution was not to fight harder, but to intercept the seed before it could propagate.
+              It was the goddess <span className="text-stone-300">Kali</span> — the fierce, boundless, time-embodying manifestation of the Divine Mother — who ultimately resolved the paradox. At the Goddess's command, Kali consumed every drop of Raktabeej's blood before it could touch the earth, preventing further multiplication and enabling the Goddess to destroy him. The solution was not to fight harder, but to intercept the seed before it could propagate. The defeat of Raktabeej demonstrates that wisdom and strategy can overcome even challenges that appear to grow stronger through resistance.
             </p>
           </div>
 
@@ -64,13 +64,20 @@ export function RaktabeejLore() {
           <div className="space-y-4">
             <h3 className="font-serif text-lg text-stone-200 font-semibold">The Philosophy Behind This Project</h3>
             <p>
-              Raktabeej's boon is a precise metaphor for what this engine does. A single video file — like a single drop of blood — contains within it the seed of an entire dataset. Left alone, it is one file. But when processed through the right system, it <span className="text-stone-300">propagates</span>: splitting into segments, each segment yielding dozens of frames, each frame becoming a structured, named data sample suitable for AI training, computer vision annotation, remote sensing analysis, or surveillance research.
+              Inspired by the myth of Raktabeej, this project reimagines multiplication as a structured process for dataset creation, transforming a legendary challenge into a modern technological metaphor. A single video file — like a single drop of blood — contains within it the seed of an entire dataset. Left alone, it is one file. But when processed through the right system, it <span className="text-stone-300">propagates</span>: splitting into segments, each segment yielding dozens of frames, each frame becoming a structured, named data sample suitable for AI training, computer vision annotation, remote sensing analysis, or research.
             </p>
             <p>
               One video becomes hundreds or thousands of precisely timestamped, semantically organized images — just as one drop of Raktabeej's blood became an army. The multiplication is not chaos; it is governed, structured, and purposeful. Every frame carries its lineage in its filename: which video it came from, which segment, which position within that segment.
             </p>
             <p>
-              Where Kali's intervention <span className="text-stone-300 italic">stopped</span> the multiplication, this engine <span className="text-stone-300 italic">harnesses</span> it. The boon becomes a tool.
+              This project draws inspiration from the multiplication principle found in the Raktabeej narrative and applies it constructively to large-scale dataset generation.
+            </p>
+          </div>
+
+          {/* Mythology disclaimer */}
+          <div className="border border-stone-800/60 rounded px-5 py-4 bg-stone-950/30">
+            <p className="text-xs text-stone-600 font-mono leading-relaxed">
+              The account of Raktabeej presented here is drawn from the <span className="italic">Devi Mahatmya</span> and is included as the cultural and philosophical inspiration behind the project's name. It is not intended as a theological or academic claim.
             </p>
           </div>
 
