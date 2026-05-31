@@ -63,7 +63,7 @@ export async function extractSegmentFrames(
   await ffmpeg.writeFile(inputName, await fetchFile(videoFile))
 
   const segDuration = segment.endTime - segment.startTime
-  const fps = config.framesPerSegment / segDuration
+
   const outputPattern = `frame_s${segment.index}_%03d.jpg`
 
 await ffmpeg.exec([
