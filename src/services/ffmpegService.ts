@@ -238,11 +238,17 @@ export async function extractSegmentFrames(
 
     try {
       const data = await ffmpeg.readFile(frameName)
-      const raw  = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string)
 
-      // Make a detached copy — never hold a view into WASM heap
-      const bytes = new Uint8Array(raw.length)
-      bytes.set(raw)
+      // @ffmpeg/ffmpeg types readFile() as Uint8Array<ArrayBufferLike> which
+      // may contain SharedArrayBuffer. Blob() only accepts ArrayBuffer, so we
+      // use buffer.slice() to get a plain ArrayBuffer copy — this also
+      // safely detaches us from the WASM heap.
+      const raw: Uint8Array = data instanceof Uint8Array
+        ? data
+        : new TextEncoder().encode(data as string)
+      const bytes = new Uint8Array(
+        raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)
+      )
 
       // Validate / repair JPEG SOI marker (FFD8FF)
       const validBytes = ensureValidJpeg(bytes, segment.index, f)
