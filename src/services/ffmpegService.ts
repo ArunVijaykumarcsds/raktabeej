@@ -3,7 +3,7 @@ import { fetchFile, toBlobURL } from '@ffmpeg/util'
 import { generateFrameFilename } from '../utils/format'
 import type { ExtractedFrame, SegmentInfo, ProcessingConfig } from '../types'
 
-const FFMPEG_CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/esm'
+const FFMPEG_CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm'
 const RECYCLE_AFTER_SEGMENTS = 5
 
 let ffmpegInstance: FFmpeg | null = null
@@ -16,9 +16,9 @@ async function createAndLoadFFmpeg(onProgress?: (ratio: number) => void): Promis
   ffmpeg.on('log', ({ message }) => console.log('[FFmpeg]', message))
   if (onProgress) ffmpeg.on('progress', ({ progress }) => onProgress(progress))
   await ffmpeg.load({
-    coreURL: '/ffmpeg-core.js',
-    wasmURL: '/ffmpeg-core.wasm',
-})
+    coreURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
+    wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
+  })
   return ffmpeg
 }
 
