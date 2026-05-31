@@ -67,15 +67,21 @@ export async function extractSegmentFrames(
   const segDuration = segment.endTime - segment.startTime
   const framePrefix = `frm_s${segment.index}_`
 
-  // Convert input to raw-friendly format first
-  const convertedName = `converted_seg${segment.index}.mp4`
+  // MJPEG videos are already JPEG frames — extract directly
+  const outputPattern = `${framePrefix}%03d.jpg`
   await ffmpeg.exec([
+    '-ss', String(segment.startTime),
     '-i', inputName,
-    '-c:v', 'libx264',
-    '-preset', 'ultrafast',
-    '-crf', '23',
-    convertedName,
+    '-t', String(segDuration),
+    '-an',
+    '-vcodec', 'copy',
+    '-f', 'image2',
+    outputPattern,
   ])
+
+  for (let f = 1; f <= config.framesPerSegment; f++) {
+    if (signal?.aborted) break
+    const frameName = `${framePrefix}${String(f).padStart(3, '0')}.jpg`
 
   for (let f = 1; f <= config.framesPerSegment; f++) {
     if (signal?.aborted) break
