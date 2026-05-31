@@ -76,7 +76,6 @@ export async function extractSegmentFrames(
 ): Promise<ExtractedFrame[]> {
   if (signal?.aborted) throw new Error('Aborted')
 
-  // ── 1. Upload video to WASM FS once per lifecycle ──────────────────────────
   const ext = videoFile.name.split('.').pop()?.toLowerCase() ?? 'mp4'
   const inputName = `input_video.${ext}`
 
@@ -84,31 +83,22 @@ export async function extractSegmentFrames(
     if (currentInputName) {
       try { await ffmpeg.deleteFile(currentInputName) } catch { /* ignore */ }
     }
-    console.log(`[FFmpeg] Writing ${inputName} (${(videoFile.size / 1024 / 1024).toFixed(1)} MB)`)
+    console.log(`[FFmpeg] Writing video to WASM FS: ${inputName} (${(videoFile.size / 1024 / 1024).toFixed(1)} MB)`)
     await ffmpeg.writeFile(inputName, await fetchFile(videoFile))
     currentInputName = inputName
   }
 
-  // ── 2. Extract frames ──────────────────────────────────────────────────────
   const segDuration = segment.endTime - segment.startTime
   const framePrefix = `frm_s${segment.index}_`
   const outputPattern = `${framePrefix}%03d.jpg`
-
-  // Strategy: use -vf select to pick evenly spaced frames by PTS, then
-  // encode each as JPEG with -vsync vfr so only selected frames are written.
-  // This is lighter than fps filter and works within WASM heap limits.
-  // We select every Nth frame where N = total_frames / framesPerSegment.
-  const selectExpr = `not(mod(n\\,${Math.max(1, Math.floor(30 / config.framesPerSegment))}))`
 
   const args = [
     '-ss', String(segment.startTime),
     '-i', inputName,
     '-t', String(segDuration),
     '-an',
-    '-vf', `select='${selectExpr}',scale=iw:ih`,
-    '-vsync', 'vfr',
     '-frames:v', String(config.framesPerSegment),
-    '-q:v', '5',
+    '-c:v', 'copy',
     '-f', 'image2',
     outputPattern,
   ]
@@ -122,7 +112,6 @@ export async function extractSegmentFrames(
     throw err
   }
 
-  // ── 3. Collect frames ──────────────────────────────────────────────────────
   const frames: ExtractedFrame[] = []
 
   for (let f = 1; f <= config.framesPerSegment; f++) {
@@ -140,10 +129,9 @@ export async function extractSegmentFrames(
         raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)
       ) as Uint8Array<ArrayBuffer>
 
-      // Validate JPEG SOI marker
       const validBytes = ensureValidJpeg(bytes, segment.index, f)
       if (!validBytes) {
-        console.warn(`[FFmpeg] Seg ${segment.index} frame ${f}: not a valid JPEG, skipping`)
+        console.warn(`[FFmpeg] Segment ${segment.index} frame ${f}: not a valid JPEG, skipping`)
         await ffmpeg.deleteFile(frameName).catch(() => { /* ignore */ })
         continue
       }
