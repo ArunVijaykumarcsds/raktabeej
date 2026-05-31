@@ -17,7 +17,7 @@ export async function loadFFmpeg(
     ffmpeg.on('progress', ({ progress }) => onProgress(progress))
   }
 
-  const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm
+  const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm'
   await ffmpeg.load({
     coreURL:   await toBlobURL(`${baseURL}/ffmpeg-core.js`,   'text/javascript'),
     wasmURL:   await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
@@ -83,11 +83,11 @@ export async function extractSegmentFrames(
     const frameName = `frame_s${segment.index}_${String(f).padStart(3, '0')}.jpg`
     try {
       const data = await ffmpeg.readFile(frameName)
-      // Copy to a regular ArrayBuffer to avoid SharedArrayBuffer type conflicts
-      const buffer = data instanceof Uint8Array
-        ? new Uint8Array(data).buffer
-        : new TextEncoder().encode(data as string).buffer
-      const blob = new Blob([buffer], { type: 'image/jpeg' })
+      const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string)
+      const copy = new Uint8Array(bytes.length)
+        copy.set(bytes)
+      const blob = new Blob([copy], { type: 'image/jpeg' })
+      
       const url = URL.createObjectURL(blob)
       const globalIndex = segment.index * config.framesPerSegment + f
       const filename = generateFrameFilename(videoBaseName, segment.index + 1, f)
