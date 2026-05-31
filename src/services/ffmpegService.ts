@@ -67,6 +67,16 @@ export async function extractSegmentFrames(
   const segDuration = segment.endTime - segment.startTime
   const framePrefix = `frm_s${segment.index}_`
 
+  // Convert input to raw-friendly format first
+  const convertedName = `converted_seg${segment.index}.mp4`
+  await ffmpeg.exec([
+    '-i', inputName,
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-crf', '23',
+    convertedName,
+  ])
+
   for (let f = 1; f <= config.framesPerSegment; f++) {
     if (signal?.aborted) break
 
@@ -76,10 +86,9 @@ export async function extractSegmentFrames(
     try {
       await ffmpeg.exec([
         '-ss', String(timestamp),
-        '-i', inputName,
+        '-i', convertedName,
         '-frames:v', '1',
         '-q:v', '2',
-        '-vf', 'scale=640:-1',
         frameName,
       ])
 
@@ -109,6 +118,7 @@ export async function extractSegmentFrames(
     }
   }
 
+  try { await ffmpeg.deleteFile(convertedName) } catch { /* ignore */ }
   try { await ffmpeg.deleteFile(inputName) } catch { /* ignore */ }
 
   return frames
