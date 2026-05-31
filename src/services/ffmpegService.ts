@@ -16,9 +16,9 @@ async function createAndLoadFFmpeg(onProgress?: (ratio: number) => void): Promis
   ffmpeg.on('log', ({ message }) => console.log('[FFmpeg]', message))
   if (onProgress) ffmpeg.on('progress', ({ progress }) => onProgress(progress))
   await ffmpeg.load({
-    coreURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
-  })
+    coreURL: '/ffmpeg-core.js',
+    wasmURL: '/ffmpeg-core.wasm',
+})
   return ffmpeg
 }
 
