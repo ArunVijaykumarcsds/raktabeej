@@ -66,17 +66,17 @@ export async function extractSegmentFrames(
   const fps = config.framesPerSegment / segDuration
   const outputPattern = `frame_s${segment.index}_%03d.jpg`
 
- await ffmpeg.exec([
+await ffmpeg.exec([
   '-i', inputName,
   '-ss', String(segment.startTime),
   '-t', String(segDuration),
-  '-vf', `fps=${fps}`,
+  '-vf', `select='not(mod(n\\,1))'`,
+  '-vsync', 'vfr',
   '-frames:v', String(config.framesPerSegment),
   '-q:v', '2',
-  '-f', 'image2',
   outputPattern,
 ])
-
+  
   for (let f = 1; f <= config.framesPerSegment; f++) {
     if (signal?.aborted) break
 
