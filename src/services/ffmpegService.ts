@@ -3,7 +3,7 @@ import { fetchFile, toBlobURL } from '@ffmpeg/util'
 import { generateFrameFilename } from '../utils/format'
 import type { ExtractedFrame, SegmentInfo, ProcessingConfig } from '../types'
 
-const FFMPEG_CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm'
+const FFMPEG_CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/esm'
 const RECYCLE_AFTER_SEGMENTS = 5
 
 let ffmpegInstance: FFmpeg | null = null
