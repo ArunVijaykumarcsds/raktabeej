@@ -1,0 +1,202 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-charcoal-900 text-stone-200 font-sans antialiased;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-charcoal-850; }
+  ::-webkit-scrollbar-thumb { @apply bg-blood-800 rounded; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-blood-700; }
+
+  ::selection { @apply bg-blood-800/60 text-stone-100; }
+}
+
+@layer components {
+
+  /* ── Raktabeej watermark background ── */
+  .rb-bg {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+
+  .rb-bg::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(800px, 100vw);
+    height: min(800px, 100vh);
+    background: radial-gradient(ellipse at center,
+      rgba(155, 28, 28, 0.06) 0%,
+      rgba(155, 28, 28, 0.03) 40%,
+      transparent 70%
+    );
+    border-radius: 50%;
+    animation: diffuse 8s ease-in-out infinite;
+  }
+
+  .rb-bg::after {
+    content: 'रक्तबीज';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(120px, 20vw, 260px);
+    font-weight: 700;
+    color: rgba(155, 28, 28, 0.03);
+    white-space: nowrap;
+    letter-spacing: 0.1em;
+    user-select: none;
+  }
+
+  /* ── Ornamental divider ── */
+  .ornament {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: rgba(155, 28, 28, 0.4);
+  }
+  .ornament::before,
+  .ornament::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(155, 28, 28, 0.4), transparent);
+  }
+
+  /* ── Blood seed animation on frame cards ── */
+  .frame-card {
+    @apply relative overflow-hidden rounded border border-stone-800/60;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .frame-card:hover {
+    @apply border-blood-700/60;
+    transform: translateY(-2px);
+  }
+  .frame-card.new {
+    animation: seed-expand 0.4s ease-out forwards;
+  }
+
+  /* ── Progress ring pulse ── */
+  .progress-pulse {
+    animation: pulse-blood 2s cubic-bezier(0.4,0,0.6,1) infinite;
+  }
+
+  /* ── Shimmer loading skeleton ── */
+  .skeleton {
+    @apply bg-charcoal-850 rounded;
+    background: linear-gradient(90deg,
+      rgba(30,30,30,1) 25%,
+      rgba(60,20,20,0.5) 50%,
+      rgba(30,30,30,1) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s linear infinite;
+  }
+
+  /* ── Panel / card base ── */
+  .panel {
+    @apply bg-charcoal-850/80 border border-stone-800/50 rounded-lg backdrop-blur-sm;
+  }
+
+  /* ── Blood accent text ── */
+  .text-blood-accent {
+    @apply text-blood-500;
+    text-shadow: 0 0 20px rgba(155,28,28,0.3);
+  }
+
+  /* ── Copper accent ── */
+  .text-copper { color: #cd7f32; }
+  .border-copper { border-color: #cd7f32; }
+
+  /* ── Section heading style ── */
+  .section-title {
+    @apply font-serif font-semibold tracking-wide;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Config button ── */
+  .cfg-btn {
+    @apply px-3 py-1.5 text-sm rounded border transition-all duration-150 font-mono;
+    @apply border-stone-700 text-stone-400 bg-charcoal-850;
+  }
+  .cfg-btn:hover {
+    @apply border-blood-700 text-stone-200;
+  }
+  .cfg-btn.active {
+    @apply border-blood-600 text-blood-300 bg-blood-950/60;
+  }
+
+  /* ── Primary action button ── */
+  .btn-primary {
+    @apply flex items-center gap-2 px-6 py-3 rounded font-sans font-medium
+           bg-blood-800 hover:bg-blood-700 text-stone-100
+           border border-blood-700 hover:border-blood-600
+           transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  /* ── Secondary button ── */
+  .btn-secondary {
+    @apply flex items-center gap-2 px-4 py-2 rounded font-sans text-sm
+           bg-charcoal-850 hover:bg-charcoal-800 text-stone-300 hover:text-stone-100
+           border border-stone-700 hover:border-stone-600
+           transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+}
+
+@keyframes pulse-blood {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.04); }
+}
+@keyframes seed-expand {
+  0% { opacity: 0; transform: scale(0.4); }
+  60% { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes diffuse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes ring-expand {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+.ring-pulse {
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgba(155,28,28,0.5);
+  border-radius: 50%;
+  animation: ring-expand 2s ease-out infinite;
+}
+.ring-pulse:nth-child(2) { animation-delay: 0.7s; }
+.ring-pulse:nth-child(3) { animation-delay: 1.4s; }
