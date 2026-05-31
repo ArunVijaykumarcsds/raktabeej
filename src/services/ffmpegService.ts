@@ -1,58 +1,9 @@
-import { FFmpeg } from '@ffmpeg/ffmpeg'
-import { fetchFile, toBlobURL } from '@ffmpeg/util'
 import { generateFrameFilename } from '../utils/format'
 import type { ExtractedFrame, SegmentInfo, ProcessingConfig } from '../types'
 
-const FFMPEG_CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm'
-const RECYCLE_AFTER_SEGMENTS = 5
-
-let ffmpegInstance: FFmpeg | null = null
-let isLoaded = false
-let currentInputName: string | null = null
-let execCallCount = 0
-
-async function createAndLoadFFmpeg(onProgress?: (ratio: number) => void): Promise<FFmpeg> {
-  const ffmpeg = new FFmpeg()
-  ffmpeg.on('log', ({ message }) => console.log('[FFmpeg]', message))
-  if (onProgress) ffmpeg.on('progress', ({ progress }) => onProgress(progress))
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
-  })
-  return ffmpeg
-}
-
-function _destroyInstance() {
-  if (ffmpegInstance) {
-    try { ffmpegInstance.terminate() } catch { /* ignore */ }
-    ffmpegInstance = null
-  }
-  isLoaded = false
-  currentInputName = null
-  execCallCount = 0
-}
-
-export async function loadFFmpeg(onProgress?: (ratio: number) => void): Promise<FFmpeg> {
-  if (ffmpegInstance && isLoaded) return ffmpegInstance
-  _destroyInstance()
-  ffmpegInstance = await createAndLoadFFmpeg(onProgress)
-  isLoaded = true
-  return ffmpegInstance
-}
-
-export async function getFFmpegForSegment(
-  onProgress?: (ratio: number) => void
-): Promise<{ ffmpeg: FFmpeg; needsFileUpload: boolean }> {
-  const shouldRecycle = !ffmpegInstance || !isLoaded || execCallCount >= RECYCLE_AFTER_SEGMENTS
-  if (shouldRecycle) {
-    console.log(`[FFmpeg] Recycling WASM instance (execCallCount=${execCallCount})`)
-    _destroyInstance()
-    ffmpegInstance = await createAndLoadFFmpeg(onProgress)
-    isLoaded = true
-    return { ffmpeg: ffmpegInstance, needsFileUpload: true }
-  }
-  return { ffmpeg: ffmpegInstance!, needsFileUpload: false }
-}
+// ---------------------------------------------------------------------------
+// Video duration helper
+// ---------------------------------------------------------------------------
 
 export function getVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -65,8 +16,41 @@ export function getVideoDuration(file: File): Promise<number> {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Seek video to exact timestamp and capture frame
+// ---------------------------------------------------------------------------
+
+function captureFrame(
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  timestamp: number
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const onSeeked = () => {
+      video.removeEventListener('seeked', onSeeked)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return reject(new Error('Canvas context unavailable'))
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')),
+        'image/jpeg',
+        0.85
+      )
+    }
+    video.addEventListener('seeked', onSeeked)
+    video.currentTime = timestamp
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Core frame extraction — Canvas + HTML5 Video approach
+// No WASM, no CDN, no memory issues. Uses the browser's native video decoder.
+// ---------------------------------------------------------------------------
+
 export async function extractSegmentFrames(
-  ffmpeg: FFmpeg,
+  _ffmpeg: unknown,
   videoFile: File,
   videoBaseName: string,
   segment: SegmentInfo,
@@ -76,106 +60,85 @@ export async function extractSegmentFrames(
 ): Promise<ExtractedFrame[]> {
   if (signal?.aborted) throw new Error('Aborted')
 
-  const ext = videoFile.name.split('.').pop()?.toLowerCase() ?? 'mp4'
-  const inputName = `input_video.${ext}`
+  // Create a hidden video element and canvas
+  const video = document.createElement('video')
+  video.muted = true
+  video.preload = 'auto'
+  video.style.display = 'none'
+  document.body.appendChild(video)
 
-  if (currentInputName !== inputName) {
-    if (currentInputName) {
-      try { await ffmpeg.deleteFile(currentInputName) } catch { /* ignore */ }
-    }
-    console.log(`[FFmpeg] Writing video to WASM FS: ${inputName} (${(videoFile.size / 1024 / 1024).toFixed(1)} MB)`)
-    await ffmpeg.writeFile(inputName, await fetchFile(videoFile))
-    currentInputName = inputName
-  }
+  const canvas = document.createElement('canvas')
+  canvas.style.display = 'none'
+  document.body.appendChild(canvas)
 
-  const segDuration = segment.endTime - segment.startTime
-  const framePrefix = `frm_s${segment.index}_`
-  const outputPattern = `${framePrefix}%03d.jpg`
-
-  const args = [
-    '-ss', String(segment.startTime),
-    '-i', inputName,
-    '-t', String(segDuration),
-    '-an',
-    '-frames:v', String(config.framesPerSegment),
-    '-c:v', 'copy',
-    '-f', 'image2',
-    outputPattern,
-  ]
+  const objectUrl = URL.createObjectURL(videoFile)
 
   try {
-    await ffmpeg.exec(args)
-    execCallCount++
-  } catch (err) {
-    execCallCount++
-    console.error('[FFmpeg] exec failed for segment', segment.index, err)
-    throw err
-  }
+    // Load the video
+    await new Promise<void>((resolve, reject) => {
+      video.onloadeddata = () => resolve()
+      video.onerror = () => reject(new Error('Failed to load video'))
+      video.src = objectUrl
+      video.load()
+    })
 
-  const frames: ExtractedFrame[] = []
+    const segDuration = segment.endTime - segment.startTime
+    const frames: ExtractedFrame[] = []
 
-  for (let f = 1; f <= config.framesPerSegment; f++) {
-    if (signal?.aborted) break
+    // Calculate evenly spaced timestamps within the segment
+    for (let f = 1; f <= config.framesPerSegment; f++) {
+      if (signal?.aborted) break
 
-    const frameName = `${framePrefix}${String(f).padStart(3, '0')}.jpg`
+      // Distribute frames evenly across the segment
+      const progress = config.framesPerSegment === 1
+        ? 0.5
+        : (f - 1) / (config.framesPerSegment - 1)
+      const timestamp = segment.startTime + progress * segDuration
 
-    try {
-      const data = await ffmpeg.readFile(frameName)
+      try {
+        const blob = await captureFrame(video, canvas, timestamp)
+        const url = URL.createObjectURL(blob)
+        const globalIndex = segment.index * config.framesPerSegment + f
+        const filename = generateFrameFilename(videoBaseName, segment.index + 1, f)
 
-      const raw: Uint8Array = data instanceof Uint8Array
-        ? data
-        : new TextEncoder().encode(data as string)
-      const bytes = new Uint8Array(
-        raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)
-      ) as Uint8Array<ArrayBuffer>
+        const frame: ExtractedFrame = {
+          segmentIndex: segment.index,
+          frameIndex: f,
+          globalIndex,
+          filename,
+          url,
+          timestamp,
+        }
 
-      const validBytes = ensureValidJpeg(bytes, segment.index, f)
-      if (!validBytes) {
-        console.warn(`[FFmpeg] Segment ${segment.index} frame ${f}: not a valid JPEG, skipping`)
-        await ffmpeg.deleteFile(frameName).catch(() => { /* ignore */ })
-        continue
+        frames.push(frame)
+        onFrameExtracted(frame)
+      } catch (e) {
+        console.warn(`[Canvas] Frame ${f} of segment ${segment.index} failed:`, e)
       }
-
-      const blob = new Blob([validBytes], { type: 'image/jpeg' })
-      const url = URL.createObjectURL(blob)
-      const globalIndex = segment.index * config.framesPerSegment + f
-      const filename = generateFrameFilename(videoBaseName, segment.index + 1, f)
-      const timestamp = segment.startTime + ((f - 1) / config.framesPerSegment) * segDuration
-
-      const frame: ExtractedFrame = {
-        segmentIndex: segment.index,
-        frameIndex: f,
-        globalIndex,
-        filename,
-        url,
-        timestamp,
-      }
-
-      frames.push(frame)
-      onFrameExtracted(frame)
-      await ffmpeg.deleteFile(frameName).catch(() => { /* ignore */ })
-    } catch (e) {
-      console.warn(`[FFmpeg] Frame ${f} of segment ${segment.index} missing or unreadable:`, e)
     }
-  }
 
-  return frames
+    return frames
+  } finally {
+    // Clean up
+    URL.revokeObjectURL(objectUrl)
+    document.body.removeChild(video)
+    document.body.removeChild(canvas)
+  }
 }
 
-function ensureValidJpeg(bytes: Uint8Array<ArrayBuffer>, segIdx: number, frameIdx: number): Uint8Array<ArrayBuffer> | null {
-  if (bytes.length < 3) return null
-  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return bytes
-  if (bytes[0] === 0xD8 && bytes[1] === 0xFF) {
-    console.warn(`[FFmpeg] Seg ${segIdx} frame ${frameIdx}: prepending missing SOI 0xFF`)
-    const fixed = new Uint8Array(bytes.length + 1) as Uint8Array<ArrayBuffer>
-    fixed[0] = 0xFF
-    fixed.set(bytes, 1)
-    return fixed
-  }
-  if (bytes[0] === 0xFF && bytes[1] === 0xD8) return bytes
+// ---------------------------------------------------------------------------
+// Stub functions — kept for API compatibility with the rest of the codebase
+// FFmpeg is no longer used, these are no-ops
+// ---------------------------------------------------------------------------
+
+export async function loadFFmpeg(): Promise<unknown> {
   return null
 }
 
-export function destroyFFmpeg() {
-  _destroyInstance()
+export async function getFFmpegForSegment(): Promise<{ ffmpeg: unknown; needsFileUpload: boolean }> {
+  return { ffmpeg: null, needsFileUpload: false }
+}
+
+export function destroyFFmpeg(): void {
+  // no-op
 }
