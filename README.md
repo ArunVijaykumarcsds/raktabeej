@@ -125,43 +125,43 @@ Everything runs locally. No server. No upload. No data ever leaves the browser t
 
 ```mermaid
 flowchart TD
-    A([📼 Video File\nMP4 · MOV · AVI · MKV · WEBM · MPEG · M4V]) --> B
+    A([Video File - MP4 MOV AVI MKV WEBM MPEG M4V]) --> B
 
-    B{File Size} -->|≤ 2 GB\nDirect Upload| C
-    B -->|> 2 GB\nZIP Archive| Z[ZIP Extract Service\nextractVideoFromZip]
+    B{File Size} -->|2 GB or under - Direct Upload| C
+    B -->|Over 2 GB - ZIP Archive| Z[ZIP Extract Service - extractVideoFromZip]
     Z --> C
 
-    C[Duration Detection\nHTML5 video preload=metadata\nonloadedmetadata → video.duration] --> D
+    C[Duration Detection - HTML5 video preload metadata - onloadedmetadata reads video.duration] --> D
 
-    D[Configuration\nSegment Size · Frames per Segment] --> E
+    D[Configuration - Segment Size and Frames per Segment] --> E
 
-    E[Segment Builder\nMath.ceil duration ÷ segmentSize\nendTime = Math.min next·size, duration] --> F
+    E[Segment Builder - Math.ceil duration divided by segmentSize - endTime clamped to duration] --> F
 
-    F[[Sequential Extraction Loop\nOne segment at a time]] --> G
+    F[[Sequential Extraction Loop - One segment at a time]] --> G
 
-    G[Hidden video + canvas\nappended to document.body] --> H
+    G[Hidden video and canvas appended to document.body] --> H
 
-    H[Seek to timestamp\nvideo.currentTime = ts\nAwait seeked event] --> I
+    H[Seek to timestamp - video.currentTime equals ts - Await seeked event] --> I
 
-    I[Canvas Capture\nctx.drawImage at native resolution\ntoBlob JPEG quality 0.85] --> J
+    I[Canvas Capture - ctx.drawImage at native resolution - toBlob JPEG quality 0.85] --> J
 
-    J[Blob URL\nURL.createObjectURL] --> K
+    J[Blob URL - URL.createObjectURL] --> K
 
-    K[onFrameExtracted callback\nReal-time gallery update] --> L{More frames\nin segment?}
+    K[onFrameExtracted callback - Real-time gallery update] --> L{More frames in segment?}
 
     L -->|Yes| H
-    L -->|No| M[Cleanup\nrevokeObjectURL · removeChild video · removeChild canvas]
+    L -->|No| M[Cleanup - revokeObjectURL - removeChild video - removeChild canvas]
 
-    M --> N{More\nsegments?}
+    M --> N{More segments?}
     N -->|Yes| F
     N -->|No| O
 
-    O([Dataset Complete\nAll frames as Blob URLs in memory]) --> P
+    O([Dataset Complete - All frames as Blob URLs in memory]) --> P
 
-    P{Export} -->|Full ZIP| Q[downloadCompleteDataset\nframes/ flat + manifest.json\nDEFLATE level 6]
-    P -->|Segment ZIP| R[downloadSegmentZip\nsegment_NN/ subfolder\nDEFLATE level 6]
-    P -->|Manifest only| S[downloadManifestOnly\nraktabeej_manifest_name.json]
-    P -->|Single frame| T[downloadSingleFrame\nSynthetic anchor click]
+    P{Export} -->|Full ZIP| Q[downloadCompleteDataset - frames flat plus manifest.json - DEFLATE level 6]
+    P -->|Segment ZIP| R[downloadSegmentZip - segment subfolder - DEFLATE level 6]
+    P -->|Manifest only| S[downloadManifestOnly - raktabeej manifest JSON]
+    P -->|Single frame| T[downloadSingleFrame - Synthetic anchor click]
 ```
 
 <br>
@@ -210,14 +210,14 @@ flowchart TD
 
 ```mermaid
 graph LR
-    V(["🎬 1 Video"]) --> S10(["📦 10 Segments"])
-    S10 --> F50(["🖼 500 Frames"])
+    V["1 Video"] --> S10["10 Segments"]
+    S10 --> F50["500 Frames"]
 
-    V2(["🎬 1 Video"]) --> S60(["📦 60 Segments"])
-    S60 --> F3k(["🖼 3,000 Frames"])
+    V2["1 Video"] --> S60["60 Segments"]
+    S60 --> F3k["3000 Frames"]
 
-    V3(["🎬 1 Video"]) --> S120(["📦 120 Segments"])
-    S120 --> F6k(["🖼 6,000 Frames"])
+    V3["1 Video"] --> S120["120 Segments"]
+    S120 --> F6k["6000 Frames"]
 
     style V fill:#3b0a0a,color:#c8a882,stroke:#5a1515
     style V2 fill:#3b0a0a,color:#c8a882,stroke:#5a1515
@@ -572,8 +572,8 @@ graph TD
     HookR --> zipExtractService
     HookD --> downloadService
 
-    ffmpegService --> HTML5Video["HTML5 Video Element"]
-    ffmpegService --> Canvas["Canvas API"]
+    ffmpegService --> HTML5Video[HTML5 Video Element]
+    ffmpegService --> Canvas[Canvas API]
     downloadService --> JSZip
 
     style App fill:#141414,color:#c8c8c8,stroke:#3a3a3a
@@ -598,29 +598,23 @@ stateDiagram-v2
 
     idle --> loading : handleFile()
     loading --> idle : File loaded successfully
-    loading --> error : Invalid duration / load failure
+    loading --> error : Invalid duration or load failure
 
-    idle --> loading : startExtraction() — Initialising
-    loading --> extracting : FFmpeg stub resolves (no-op)
+    idle --> loading : startExtraction - Initialising
+    loading --> extracting : FFmpeg stub resolves no-op
     extracting --> done : All segments complete
     extracting --> error : Unhandled exception
     extracting --> idle : abort()
 
     done --> idle : reset()
     error --> idle : reset()
-
-    note right of loading
-        "Initializing FFmpeg engine…"
-        "Reading video metadata…"
-        "Scanning ZIP archive…"
-    end note
-
-    note right of extracting
-        "Processing segment N of M…"
-        AbortSignal checked
-        before every frame
-    end note
 ```
+
+<br>
+
+> **loading phase messages:** "Initializing FFmpeg engine…" · "Reading video metadata…" · "Scanning ZIP archive…"
+>
+> **extracting phase:** "Processing segment N of M…" — AbortSignal is checked before every frame.
 
 <br>
 
@@ -639,24 +633,24 @@ sequenceDiagram
     Hook->>Hook: Build SegmentInfo[]
     loop For each segment
         Hook->>Svc: extractSegmentFrames(ffmpeg_stub, file, baseName, segment, config, cb, signal)
-        Svc->>DOM: createElement video + canvas, appendChild
+        Svc->>DOM: createElement video and canvas, appendChild
         Svc->>DOM: video.src = objectURL, video.load()
         DOM-->>Svc: onloadeddata
-        loop For each frame f (1 → framesPerSegment)
+        loop For each frame f
             Svc->>DOM: video.currentTime = timestamp
             DOM-->>Svc: seeked event
             Svc->>DOM: ctx.drawImage(video, 0, 0, w, h)
-            Svc->>DOM: canvas.toBlob(JPEG 0.85)
+            Svc->>DOM: canvas.toBlob JPEG 0.85
             DOM-->>Svc: Blob
             Svc->>Svc: URL.createObjectURL(blob)
             Svc-->>Hook: onFrameExtracted(frame)
-            Hook-->>UI: setSegments() — real-time update
+            Hook-->>UI: setSegments() real-time update
         end
-        Svc->>DOM: revokeObjectURL, removeChild video+canvas
+        Svc->>DOM: revokeObjectURL, removeChild video and canvas
         Svc-->>Hook: ExtractedFrame[]
-        Hook->>Hook: segment.status = 'done'
+        Hook->>Hook: segment.status = done
     end
-    Hook-->>UI: phase = 'done'
+    Hook-->>UI: phase = done
 ```
 
 <br>
@@ -723,7 +717,7 @@ src/
 │   │                             # Auto-opens when segment.status is 'processing' or 'done'
 │   ├── FrameCard.tsx             # Thumbnail with timestamp + frame index footer; hover overlay: Preview + Download
 │   │                             # .new class triggers seed-expand animation (0.4s CSS, not Tailwind utility)
-│   ├── FramePreviewModal.tsx     # Full-screen lightbox (75vh max), ←/→/Escape keyboard nav, Download
+│   ├── FramePreviewModal.tsx     # Full-screen lightbox (75vh max), left/right/Escape keyboard nav, Download
 │   ├── RaktabeejLore.tsx         # Mythology section, use-case grid (9 items)
 │   └── Footer.tsx                # Brand tagline, email / LinkedIn / GitHub icon links
 │
@@ -772,8 +766,6 @@ src/
 ## 12 · Screenshots
 
 <br>
-
-### Application Gallery
 
 > *Replace each placeholder with actual screenshot files before publishing.*
 
@@ -1050,15 +1042,15 @@ Defined in `tailwind.config.js` (custom theme tokens) and `index.css` (component
 
 | Domain | Application |
 |--------|-------------|
-| 🔬 Computer Vision | Training image classifiers, feature extractors |
-| 📦 Object Detection | Generating frame sequences for bounding-box annotation |
-| 📡 SAR Image Analysis | Synthetic Aperture Radar frame sequence datasets |
-| 🌍 Remote Sensing | Aerial and satellite video frame extraction |
-| 📷 Surveillance Analytics | Frame sampling from security or field footage |
-| ⏳ Temporal Sequence Learning | Sequential frame datasets for video understanding models |
-| 🏛 Scene Understanding | Diverse scene composition datasets |
-| ⚠ Anomaly Detection | Generating labelled normal/anomaly frame sets |
-| 🎓 Research & Academia | Reproducible dataset generation for publications |
+| Computer Vision | Training image classifiers, feature extractors |
+| Object Detection | Generating frame sequences for bounding-box annotation |
+| SAR Image Analysis | Synthetic Aperture Radar frame sequence datasets |
+| Remote Sensing | Aerial and satellite video frame extraction |
+| Surveillance Analytics | Frame sampling from security or field footage |
+| Temporal Sequence Learning | Sequential frame datasets for video understanding models |
+| Scene Understanding | Diverse scene composition datasets |
+| Anomaly Detection | Generating labelled normal/anomaly frame sets |
+| Research and Academia | Reproducible dataset generation for publications |
 
 <br>
 
@@ -1112,10 +1104,10 @@ The multiplication is not random. It is governed, structured, and purposeful. On
 
 ```mermaid
 graph LR
-    A["◆ Origin\n(Video File)"] --> B["◈ Generation\n(Segment Extraction)"]
-    B --> C["◇ Descendant\n(JPEG Frame)"]
-    C --> D["▣ Army\n(Dataset)"]
-    D --> E["✦ Multiplication Complete\n(Training Archive)"]
+    A["Origin - Video File"] --> B["Generation - Segment Extraction"]
+    B --> C["Descendant - JPEG Frame"]
+    C --> D["Army - Dataset"]
+    D --> E["Multiplication Complete - Training Archive"]
 
     style A fill:#3b0a0a,color:#c8a882,stroke:#771d1d
     style B fill:#1a1a1a,color:#a08060,stroke:#5a1515
@@ -1150,13 +1142,13 @@ The current engine produces raw, unnamed frames. A future evolution — **Raktab
 
 ```mermaid
 flowchart TD
-    A([🎬 Video Input]) --> B[Frame Extraction\n— current capability —]
-    B --> C([🖼 Raw JPEG Frames])
+    A([Video Input]) --> B[Frame Extraction - current capability]
+    B --> C([Raw JPEG Frames])
 
-    C --> D["🤖 AI Captioning\nAutomatic scene descriptions per frame\n— future —"]
-    D --> E["📦 Object Detection\nBounding box inference per frame\n— future —"]
-    E --> F["🏷 Auto Annotation\nLabel assignment from detection results\n— future —"]
-    F --> G["✅ Training-Ready Dataset\nFrames + captions + annotations + manifest\n— future —"]
+    C --> D[AI Captioning - Automatic scene descriptions per frame - future]
+    D --> E[Object Detection - Bounding box inference per frame - future]
+    E --> F[Auto Annotation - Label assignment from detection results - future]
+    F --> G[Training-Ready Dataset - Frames plus captions plus annotations plus manifest - future]
 
     style B fill:#1a1a1a,color:#c8a882,stroke:#3a3a3a
     style C fill:#141414,color:#cd7f32,stroke:#5a1515
@@ -1174,10 +1166,10 @@ flowchart TD
 |-------|:------:|-------------|
 | Frame Extraction | ✅ **Current** | HTML5 Video + Canvas, JPEG 0.85, named frames |
 | Dataset Manifest | ✅ **Current** | Machine-readable JSON lineage |
-| AI Captioning | 🔲 Future | Per-frame scene descriptions from vision-language models |
-| Object Detection | 🔲 Future | Bounding box inference over extracted frames |
-| Auto Annotation | 🔲 Future | Structured label assignment from detection outputs |
-| Training-Ready Export | 🔲 Future | Frames + captions + annotations + manifest in one archive |
+| AI Captioning | Future | Per-frame scene descriptions from vision-language models |
+| Object Detection | Future | Bounding box inference over extracted frames |
+| Auto Annotation | Future | Structured label assignment from detection outputs |
+| Training-Ready Export | Future | Frames + captions + annotations + manifest in one archive |
 
 <br>
 
