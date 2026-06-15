@@ -29,6 +29,9 @@
 
 ### रक्तबीज · Dataset Generation Engine
 
+## 🌐 Live Demo
+👉 [Click here to view the live project](https://raktabeej-5mbx.onrender.com/)
+
 *One video. Countless frames. Structured lineage — entirely in your browser.*
 
 <br>
