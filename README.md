@@ -63,7 +63,8 @@ A 2-minute video at 2-second segments with 50 frames per segment yields **3,000 
 
 **Live extraction in progress**
 
-![Processing panel showing dual progress bars — segments and frames — with live frame count](https://raw.githubusercontent.com/ArunVijaykumarcsds/raktabeej/main/public/screenshot-processing.png)
+![Processing panel showing dual progress bars — segments and frames — with live frame count](<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/c0ab4a8e-fa71-42f4-9873-0a01e9ffce45" />
+)
 
 </td>
 <td width="50%">
